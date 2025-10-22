@@ -317,7 +317,8 @@ deploy_application() {
     log INFO "===== STARTING APPLICATION DEPLOYMENT ====="
    
     # Get current directory (the cloned repo)
-    LOCAL_DIR=$(pwd)
+    LOCAL_DIR="../hng13-stage1-devops"
+    # LOCAL_DIR=$(pwd)
     REMOTE_DIR="/home/$SSH_USER/app"
    
     log INFO "Transferring files to remote server"
