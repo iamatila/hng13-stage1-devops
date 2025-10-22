@@ -327,6 +327,12 @@ deploy_application() {
     # Create remote directory
     ssh -i "$SSH_KEY_PATH" "$SSH_USER@$SERVER_IP" "mkdir -p $REMOTE_DIR" >> "../$LOG_FILE" 2>&1
     log INFO "Remote directory created"
+
+    echo "LOCAL_DIR: $LOCAL_DIR"
+    echo "REMOTE_DIR: $REMOTE_DIR"
+    echo "SSH_USER: $SSH_USER"
+    echo "SERVER_IP: $SERVER_IP"
+    echo "SSH_KEY_PATH: $SSH_KEY_PATH"
    
     # Transfer files using rsync
     # if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
