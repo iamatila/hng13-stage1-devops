@@ -329,7 +329,15 @@ deploy_application() {
     log INFO "Remote directory created"
    
     # Transfer files using rsync
-    if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
+    # if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
+    #     --exclude='.git' \
+    #     "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
+    #     log INFO "Files transferred successfully"
+    # else
+    #     log ERROR "Failed to transfer files"
+    #     exit 1
+    # fi
+    if rsync -avz -e "ssh -i '$SSH_KEY_PATH' -o StrictHostKeyChecking=no" \
         --exclude='.git' \
         "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
         log INFO "Files transferred successfully"
