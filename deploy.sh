@@ -329,6 +329,29 @@ deploy_application() {
     ssh -i "$SSH_KEY_PATH" "$SSH_USER@$SERVER_IP" "mkdir -p $REMOTE_DIR" >> "../$LOG_FILE" 2>&1
     log INFO "Remote directory created"
 
+    # Navigate to your project directory first
+cd /c/Users/root/Documents/GitHub/HNG/DevOps/task0/hng13-stage1-devops
+
+# Then use current directory
+LOCAL_DIR="."
+REMOTE_DIR="/home/ubuntu/app"
+SSH_USER="ubuntu"
+SERVER_IP="16.171.142.9"
+SSH_KEY_PATH="/c/Users/root/Documents/GitHub/HNG/DevOps/HngDevopstask1.pem"
+
+# Ensure SSH key has correct permissions
+chmod 600 "$SSH_KEY_PATH"
+
+# Now rsync should work
+if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
+    --exclude='.git' \
+    "./" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
+    log INFO "Files transferred successfully"
+else
+    log ERROR "Failed to transfer files"
+    exit 1
+fi
+
     # echo "LOCAL_DIR: $LOCAL_DIR"
     # echo "REMOTE_DIR: $REMOTE_DIR"
     # echo "SSH_USER: $SSH_USER"
@@ -336,14 +359,14 @@ deploy_application() {
     # echo "SSH_KEY_PATH: $SSH_KEY_PATH"
    
     # Transfer files using rsync
-    if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
-        --exclude='.git' \
-        "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
-        log INFO "Files transferred successfully"
-    else
-        log ERROR "Failed to transfer files"
-        exit 1
-    fi
+    # if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
+    #     --exclude='.git' \
+    #     "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
+    #     log INFO "Files transferred successfully"
+    # else
+    #     log ERROR "Failed to transfer files"
+    #     exit 1
+    # fi
     # if rsync -avz -e "ssh -i '$SSH_KEY_PATH' -o StrictHostKeyChecking=no" \
     #     --exclude='.git' \
     #     "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
