@@ -317,9 +317,14 @@ deploy_application() {
     log INFO "===== STARTING APPLICATION DEPLOYMENT ====="
    
     # Get current directory (the cloned repo)
-    LOCAL_DIR="../hng13-stage1-devops"
+    # LOCAL_DIR="../hng13-stage1-devops"
     # LOCAL_DIR=$(pwd)
-    REMOTE_DIR="/home/$SSH_USER/app"
+    # REMOTE_DIR="/home/$SSH_USER/app"
+    LOCAL_DIR="."
+    REMOTE_DIR="/home/ubuntu/app"
+    SSH_USER="ubuntu"
+    SERVER_IP="16.171.142.9"
+    SSH_KEY_PATH="/c/Users/root/Documents/GitHub/HNG/DevOps/HngDevopstask1.pem"
    
     log INFO "Transferring files to remote server"
     log INFO "Local directory: $LOCAL_DIR"
@@ -329,23 +334,13 @@ deploy_application() {
     ssh -i "$SSH_KEY_PATH" "$SSH_USER@$SERVER_IP" "mkdir -p $REMOTE_DIR" >> "../$LOG_FILE" 2>&1
     log INFO "Remote directory created"
 
-    # Navigate to your project directory first
-cd /c/Users/root/Documents/GitHub/HNG/DevOps/task0/hng13-stage1-devops
+    # Ensure SSH key has correct permissions
+chmod 600 "$SSH_KEY_PATH" 2>/dev/null
 
-# Then use current directory
-LOCAL_DIR="."
-REMOTE_DIR="/home/ubuntu/app"
-SSH_USER="ubuntu"
-SERVER_IP="16.171.142.9"
-SSH_KEY_PATH="/c/Users/root/Documents/GitHub/HNG/DevOps/HngDevopstask1.pem"
-
-# Ensure SSH key has correct permissions
-chmod 600 "$SSH_KEY_PATH"
-
-# Now rsync should work
-if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
+# Add -n flag to prevent stdin issues, remove >> redirection temporarily to test
+if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no -n -o LogLevel=ERROR" \
     --exclude='.git' \
-    "./" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
+    "./" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" 2>&1 | tee -a "../$LOG_FILE"; then
     log INFO "Files transferred successfully"
 else
     log ERROR "Failed to transfer files"
