@@ -329,22 +329,14 @@ deploy_application() {
     ssh -i "$SSH_KEY_PATH" "$SSH_USER@$SERVER_IP" "mkdir -p $REMOTE_DIR" >> "../$LOG_FILE" 2>&1
     log INFO "Remote directory created"
 
-    echo "LOCAL_DIR: $LOCAL_DIR"
-    echo "REMOTE_DIR: $REMOTE_DIR"
-    echo "SSH_USER: $SSH_USER"
-    echo "SERVER_IP: $SERVER_IP"
-    echo "SSH_KEY_PATH: $SSH_KEY_PATH"
+    # echo "LOCAL_DIR: $LOCAL_DIR"
+    # echo "REMOTE_DIR: $REMOTE_DIR"
+    # echo "SSH_USER: $SSH_USER"
+    # echo "SERVER_IP: $SERVER_IP"
+    # echo "SSH_KEY_PATH: $SSH_KEY_PATH"
    
     # Transfer files using rsync
-    # if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
-    #     --exclude='.git' \
-    #     "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
-    #     log INFO "Files transferred successfully"
-    # else
-    #     log ERROR "Failed to transfer files"
-    #     exit 1
-    # fi
-    if rsync -avz -e "ssh -i '$SSH_KEY_PATH' -o StrictHostKeyChecking=no" \
+    if rsync -avz -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
         --exclude='.git' \
         "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
         log INFO "Files transferred successfully"
@@ -352,6 +344,14 @@ deploy_application() {
         log ERROR "Failed to transfer files"
         exit 1
     fi
+    # if rsync -avz -e "ssh -i '$SSH_KEY_PATH' -o StrictHostKeyChecking=no" \
+    #     --exclude='.git' \
+    #     "$LOCAL_DIR/" "$SSH_USER@$SERVER_IP:$REMOTE_DIR/" >> "../$LOG_FILE" 2>&1; then
+    #     log INFO "Files transferred successfully"
+    # else
+    #     log ERROR "Failed to transfer files"
+    #     exit 1
+    # fi
    
     # Stop and remove old container if exists (idempotency)
     log INFO "Checking for existing containers"
