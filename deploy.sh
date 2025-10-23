@@ -50,13 +50,27 @@ get_user_input() {
         fi
     done
 
+    # while true; do
+    #     printf "Enter SSH key path: "
+    #     read -r SSH_KEY_PATH
+    #     if [ -f "$SSH_KEY_PATH" ]; then
+    #         break
+    #     else
+    #         log_error "SSH key not found"
+    #     fi
+    # done
     while true; do
         printf "Enter SSH key path: "
         read -r SSH_KEY_PATH
+        
+        # Expand tilde to home directory
+        SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
+        
         if [ -f "$SSH_KEY_PATH" ]; then
             break
         else
-            log_error "SSH key not found"
+            log_error "SSH key not found at: $SSH_KEY_PATH"
+            log_error "Please check the path and try again"
         fi
     done
 
