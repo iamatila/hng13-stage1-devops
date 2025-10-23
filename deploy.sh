@@ -354,12 +354,14 @@ get_user_input() {
     done
 
     while true; do
-        printf "Enter application port: "
+        printf "Enter application port (recommended: 3000-9000, avoid 80/443): "
         read -r APP_PORT
-        if [[ "$APP_PORT" =~ ^[0-9]+$ ]] && [ "$APP_PORT" -gt 0 ] && [ "$APP_PORT" -lt 65536 ]; then
+        if [[ "$APP_PORT" =~ ^[0-9]+$ ]] && [ "$APP_PORT" -gt 1024 ] && [ "$APP_PORT" -lt 65536 ]; then
             break
+        elif [ "$APP_PORT" -eq 80 ] || [ "$APP_PORT" -eq 443 ]; then
+            log_error "Ports 80 and 443 are reserved for Nginx. Please choose a port above 1024 (e.g., 3000, 8080)"
         else
-            log_error "Port must be between 1-65535"
+            log_error "Port must be between 1025-65535"
         fi
     done
 
@@ -475,40 +477,6 @@ ENDSSH
     log_success "Server setup completed"
 }
 
-# # Transfer files to server
-# transfer_files() {
-#     local repo_name=$(basename "$(pwd)")
-    
-#     log_info "Transferring files to server..."
-    
-#     # Create remote directory first
-#     ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no "${SSH_USERNAME}@${SERVER_IP}" \
-#         "mkdir -p ~/app" || {
-#         log_error "Failed to create remote directory"
-#         return 1
-#     }
-    
-#     # Use rsync with better options and error handling
-#     rsync -avz --delete \
-#         --exclude='.git' \
-#         --exclude='node_modules' \
-#         --exclude='__pycache__' \
-#         --exclude='*.pyc' \
-#         --exclude='.env' \
-#         --exclude='venv' \
-#         --exclude='.DS_Store' \
-#         -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no -o BatchMode=yes" \
-#         ./ "${SSH_USERNAME}@${SERVER_IP}:~/app/" 2>&1 | tee /tmp/rsync.log
-    
-#     if [ ${PIPESTATUS[0]} -ne 0 ]; then
-#         log_error "File transfer failed. Check /tmp/rsync.log for details"
-#         cat /tmp/rsync.log
-#         return 1
-#     fi
-    
-#     log_success "Files transferred successfully"
-# }
-
 # Transfer files to server
 transfer_files() {
     local repo_name=$(basename "$(pwd)")
@@ -571,20 +539,29 @@ set -e
 
 cd ~/app
 
-echo "[INFO] Stopping old container..."
+echo "[INFO] Cleaning up old deployment..."
+# Stop and remove old container
 docker stop ${repo_name}-container 2>/dev/null || true
 docker rm ${repo_name}-container 2>/dev/null || true
 
-echo "[INFO] Removing old image..."
+# Check if port is still in use and kill the process
+PORT_IN_USE=\$(sudo lsof -ti:${APP_PORT} 2>/dev/null || true)
+if [ -n "\$PORT_IN_USE" ]; then
+    echo "[WARNING] Port ${APP_PORT} is in use by process \$PORT_IN_USE. Attempting to free it..."
+    sudo kill -9 \$PORT_IN_USE 2>/dev/null || true
+    sleep 2
+fi
+
+# Remove old image
 docker rmi ${repo_name}:latest 2>/dev/null || true
 
 echo "[INFO] Building Docker image..."
 docker build -t ${repo_name}:latest .
 
-echo "[INFO] Starting container..."
+echo "[INFO] Starting container on port ${APP_PORT}..."
 docker run -d \
     --name ${repo_name}-container \
-    -p 127.0.0.1:${APP_PORT}:${APP_PORT} \
+    -p ${APP_PORT}:80 \
     --restart unless-stopped \
     ${repo_name}:latest
 
