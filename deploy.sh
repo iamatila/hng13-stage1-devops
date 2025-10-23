@@ -475,21 +475,55 @@ ENDSSH
     log_success "Server setup completed"
 }
 
+# # Transfer files to server
+# transfer_files() {
+#     local repo_name=$(basename "$(pwd)")
+    
+#     log_info "Transferring files to server..."
+    
+#     # Create remote directory first
+#     ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no "${SSH_USERNAME}@${SERVER_IP}" \
+#         "mkdir -p ~/app" || {
+#         log_error "Failed to create remote directory"
+#         return 1
+#     }
+    
+#     # Use rsync with better options and error handling
+#     rsync -avz --delete \
+#         --exclude='.git' \
+#         --exclude='node_modules' \
+#         --exclude='__pycache__' \
+#         --exclude='*.pyc' \
+#         --exclude='.env' \
+#         --exclude='venv' \
+#         --exclude='.DS_Store' \
+#         -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no -o BatchMode=yes" \
+#         ./ "${SSH_USERNAME}@${SERVER_IP}:~/app/" 2>&1 | tee /tmp/rsync.log
+    
+#     if [ ${PIPESTATUS[0]} -ne 0 ]; then
+#         log_error "File transfer failed. Check /tmp/rsync.log for details"
+#         cat /tmp/rsync.log
+#         return 1
+#     fi
+    
+#     log_success "Files transferred successfully"
+# }
+
 # Transfer files to server
 transfer_files() {
     local repo_name=$(basename "$(pwd)")
     
     log_info "Transferring files to server..."
     
-    # Create remote directory first
+    # Create remote directory
     ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no "${SSH_USERNAME}@${SERVER_IP}" \
-        "mkdir -p ~/app" || {
+        "rm -rf ~/app && mkdir -p ~/app" || {
         log_error "Failed to create remote directory"
         return 1
     }
     
-    # Use rsync with better options and error handling
-    rsync -avz --delete \
+    log_info "Creating archive..."
+    tar czf /tmp/deploy_archive.tar.gz \
         --exclude='.git' \
         --exclude='node_modules' \
         --exclude='__pycache__' \
@@ -497,14 +531,29 @@ transfer_files() {
         --exclude='.env' \
         --exclude='venv' \
         --exclude='.DS_Store' \
-        -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no -o BatchMode=yes" \
-        ./ "${SSH_USERNAME}@${SERVER_IP}:~/app/" 2>&1 | tee /tmp/rsync.log
-    
-    if [ ${PIPESTATUS[0]} -ne 0 ]; then
-        log_error "File transfer failed. Check /tmp/rsync.log for details"
-        cat /tmp/rsync.log
+        . || {
+        log_error "Failed to create archive"
         return 1
-    fi
+    }
+    
+    log_info "Uploading archive..."
+    scp -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no \
+        /tmp/deploy_archive.tar.gz "${SSH_USERNAME}@${SERVER_IP}:/tmp/" || {
+        log_error "Failed to upload archive"
+        rm -f /tmp/deploy_archive.tar.gz
+        return 1
+    }
+    
+    log_info "Extracting files on server..."
+    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no "${SSH_USERNAME}@${SERVER_IP}" \
+        "cd ~/app && tar xzf /tmp/deploy_archive.tar.gz && rm /tmp/deploy_archive.tar.gz" || {
+        log_error "Failed to extract files"
+        rm -f /tmp/deploy_archive.tar.gz
+        return 1
+    }
+    
+    # Cleanup local archive
+    rm -f /tmp/deploy_archive.tar.gz
     
     log_success "Files transferred successfully"
 }
