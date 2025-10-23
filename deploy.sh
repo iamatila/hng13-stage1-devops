@@ -50,15 +50,6 @@ get_user_input() {
         fi
     done
 
-    # while true; do
-    #     printf "Enter SSH key path: "
-    #     read -r SSH_KEY_PATH
-    #     if [ -f "$SSH_KEY_PATH" ]; then
-    #         break
-    #     else
-    #         log_error "SSH key not found"
-    #     fi
-    # done
     while true; do
         printf "Enter SSH key path: "
         read -r SSH_KEY_PATH
@@ -67,6 +58,7 @@ get_user_input() {
         SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
         
         if [ -f "$SSH_KEY_PATH" ]; then
+            chmod 600 "$SSH_KEY_PATH"
             break
         else
             log_error "SSH key not found at: $SSH_KEY_PATH"
@@ -127,12 +119,37 @@ setup_server() {
     log_info "Setting up server..."
     ssh -i "$SSH_KEY_PATH" "${SSH_USERNAME}@${SERVER_IP}" "
         sudo apt-get update
-        sudo apt-get install -y docker.io nginx
+        sudo apt-get install -y docker.io nginx rsync
         sudo systemctl enable docker nginx
         sudo systemctl start docker nginx
         sudo usermod -aG docker \$USER
+        
+        # Create app directory
+        mkdir -p ~/app
+        
         echo 'Server setup complete'
     " || { log_error "Server setup failed"; return 1; }
+}
+
+# Transfer files to server
+transfer_files() {
+    local repo_name=$(basename "$(pwd)")
+    
+    log_info "Transferring files to server..."
+    
+    # Use rsync to transfer project files (excluding .git)
+    rsync -avz --delete \
+        --exclude='.git' \
+        --exclude='node_modules' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
+        ./ "${SSH_USERNAME}@${SERVER_IP}:~/app/" || { 
+        log_error "File transfer failed"; 
+        return 1; 
+    }
+    
+    log_success "Files transferred successfully"
 }
 
 # Deploy application
@@ -146,13 +163,19 @@ deploy_app() {
 #!/bin/bash
 set -e
 
+cd ~/app
+
 # Cleanup old container
 docker stop ${repo_name}-container 2>/dev/null || true
 docker rm ${repo_name}-container 2>/dev/null || true
 
+# Remove old image
+docker rmi ${repo_name}:latest 2>/dev/null || true
+
 # Build and run
 docker build -t ${repo_name}:latest .
 docker run -d --name ${repo_name}-container -p 127.0.0.1:${APP_PORT}:${APP_PORT} ${repo_name}:latest
+
 echo 'Container deployed'
 EOF
 
@@ -161,32 +184,49 @@ EOF
 server {
     listen 80;
     server_name ${DOMAIN_NAME} www.${DOMAIN_NAME};
+    
     location / {
-        proxy_pass http://localhost:${APP_PORT};
+        proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
+    
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
 }
 EOF
 
-    # Transfer files
-    scp -i "$SSH_KEY_PATH" deploy_remote.sh nginx_${repo_name}.conf "${SSH_USERNAME}@${SERVER_IP}:/tmp/"
+    # Transfer deployment files
+    scp -i "$SSH_KEY_PATH" deploy_remote.sh nginx_${repo_name}.conf "${SSH_USERNAME}@${SERVER_IP}:/tmp/" || {
+        log_error "Failed to transfer deployment files"
+        return 1
+    }
 
     # Execute deployment
     ssh -i "$SSH_KEY_PATH" "${SSH_USERNAME}@${SERVER_IP}" "
         cd /tmp
+        chmod +x deploy_remote.sh
         bash deploy_remote.sh
+        
+        # Configure nginx
         sudo cp nginx_${repo_name}.conf /etc/nginx/sites-available/${repo_name}
         sudo ln -sf /etc/nginx/sites-available/${repo_name} /etc/nginx/sites-enabled/
+        sudo rm -f /etc/nginx/sites-enabled/default
         sudo nginx -t && sudo systemctl reload nginx
+        
+        # Cleanup
+        rm -f deploy_remote.sh nginx_${repo_name}.conf
+        
         echo 'Nginx configured'
     " || { log_error "Deployment failed"; return 1; }
 
-    # Cleanup
+    # Cleanup local files
     rm -f deploy_remote.sh nginx_${repo_name}.conf
+    
+    log_success "Application deployed"
 }
 
 # Verify deployment
@@ -196,17 +236,32 @@ verify_deployment() {
     log_info "Verifying deployment..."
     ssh -i "$SSH_KEY_PATH" "${SSH_USERNAME}@${SERVER_IP}" "
         # Check container
-        docker ps | grep ${repo_name}-container || { echo 'Container not running'; exit 1; }
+        if docker ps | grep ${repo_name}-container; then
+            echo 'Container is running'
+        else
+            echo 'Container not running'
+            docker ps -a | grep ${repo_name}-container || true
+            exit 1
+        fi
         
         # Check nginx
-        sudo systemctl status nginx | grep active || { echo 'Nginx not active'; exit 1; }
+        if sudo systemctl is-active nginx >/dev/null 2>&1; then
+            echo 'Nginx is active'
+        else
+            echo 'Nginx not active'
+            exit 1
+        fi
         
         # Health check
+        echo 'Waiting for application to start...'
         sleep 5
+        
         if curl -f -s http://localhost:${APP_PORT} >/dev/null; then
             echo 'Application health check passed'
         else
-            echo 'Application health check failed'
+            echo 'Application health check failed - checking logs...'
+            docker logs ${repo_name}-container --tail 50
+            exit 1
         fi
     " || { log_error "Verification failed"; return 1; }
 }
@@ -219,11 +274,13 @@ main() {
     setup_repo
     test_connection
     setup_server
+    transfer_files  # THIS WAS MISSING!
     deploy_app
     verify_deployment
     
     log_success "Deployment completed successfully!"
     log_info "Access your application at: http://${DOMAIN_NAME}"
+    log_info "Also accessible at: http://${SERVER_IP}"
 }
 
 main "$@"
